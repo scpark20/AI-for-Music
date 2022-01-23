@@ -2,13 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from dataset import dims
 from easydict import EasyDict
-
-model_hparams = EasyDict(n_tokens = dims.interval + dims.velocity + dims.note_on + dims.note_off + dims.pedal_on + dims.pedal_off,
-                         embedding_dim = 512,
-                         hidden_dim = 1024
-                        )
 
 class Model(nn.Module):
     def __init__(self, model_hparams):
@@ -30,4 +24,22 @@ class Model(nn.Module):
         # (batch, length, n_tokens)
         x = self.out_layer(x)
         return x
+    
+    def _get_initial_state(self, batch_size):
+        h = torch.zeros(3, batch_size, self.hp.hidden_dim).cuda()
+        c = torch.zeros(3, batch_size, self.hp.hidden_dim).cuda()
+        return (h, c)
+    
+    def inference(self, x, state=None, temperature=1.0):
+        # x : (batch, length)
+        
+        # (batch, length, model_dim)
+        x = self.embedding(x)
+        # (batch, length, hidden_dim)
+        x, state = self.rnn(x, state)
+        # (batch, length, n_tokens)
+        x = self.out_layer(x)
+        # (batch, 1)
+        x = torch.distributions.categorical.Categorical(logits=x[:, -1:]/temperature).sample()
+        return x, state
         
